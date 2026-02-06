@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package notifications;
+
+option go_package = "github.com/reliability-lab/gen/notifications";
+
+service Notifications {
+  rpc SendReceipt(SendReceiptRequest) returns (SendReceiptResponse);
+}
+
+message SendReceiptRequest {
+  string order_id = 1;
+  string user_id = 2;
+}
+
+message SendReceiptResponse {
+  bool ok = 1;
+}

@@ -1,0 +1,163 @@
+# Reliability Lab - Step 1
+# Run from repo root: docker compose -f deploy/compose/docker-compose.yml up --build
+# Or from this dir: docker compose up --build (context in build points to repo root)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reliability}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reliability_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-reliability_lab}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reliability}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ../../observability/otel-collector.yaml:/etc/otel-collector.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - tempo
+      - prometheus
+      - loki
+
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ../../observability/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ../../observability/alerts.yaml:/etc/prometheus/alerts.yaml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:10.2.3
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_PORT: 3000
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ../../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+
+  tempo:
+    image: grafana/tempo:2.3.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ../../observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"
+
+  loki:
+    image: grafana/loki:2.9.2
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ../../observability/loki.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:2.9.2
+    command: -config.file=/etc/promtail/config.yaml
+    volumes:
+      - ../../observability/promtail.yaml:/etc/promtail/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - loki
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: services/gateway/Dockerfile
+    environment:
+      GATEWAY_HTTP_PORT: "8080"
+      ORDERS_GRPC_ADDR: orders:50051
+      PAYMENTS_GRPC_ADDR: payments:50052
+      NOTIFICATIONS_GRPC_ADDR: notifications:50053
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "8080:8080"
+    depends_on:
+      - orders
+      - payments
+      - notifications
+      - otel-collector
+
+  orders:
+    build:
+      context: ../..
+      dockerfile: services/orders/Dockerfile
+    environment:
+      ORDERS_GRPC_PORT: "50051"
+      ORDERS_HTTP_PORT: "8081"
+      ORDERS_DB_URL: "postgres://${POSTGRES_USER:-reliability}:${POSTGRES_PASSWORD:-reliability_secret}@postgres:5432/${POSTGRES_DB:-reliability_lab}?sslmode=disable"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "50051:50051"
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      - otel-collector
+
+  payments:
+    build:
+      context: ../..
+      dockerfile: services/payments/Dockerfile
+    environment:
+      PAYMENTS_GRPC_PORT: "50052"
+      PAYMENTS_HTTP_PORT: "8082"
+      PAYMENTS_LATENCY_MS: ${PAYMENTS_LATENCY_MS:-0}
+      PAYMENTS_ERROR_RATE: ${PAYMENTS_ERROR_RATE:-0.0}
+      PAYMENTS_FORCE_FAIL: ${PAYMENTS_FORCE_FAIL:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "50052:50052"
+      - "8082:8082"
+    depends_on:
+      - otel-collector
+
+  notifications:
+    build:
+      context: ../..
+      dockerfile: services/notifications/Dockerfile
+    environment:
+      NOTIFICATIONS_GRPC_PORT: "50053"
+      NOTIFICATIONS_HTTP_PORT: "8083"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "50053:50053"
+      - "8083:8083"
+    depends_on:
+      - otel-collector
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  tempo_data:
+  loki_data:

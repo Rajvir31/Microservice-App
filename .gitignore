@@ -1,0 +1,47 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output
+/bin/
+/dist/
+/build/
+
+# Go workspace
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Grafana
+observability/grafana/data/
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage.out
+coverage.html

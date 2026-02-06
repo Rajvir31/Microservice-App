@@ -1,0 +1,14 @@
+# Build context must be repo root (../..) so gen/ is available
+FROM golang:1.22-alpine AS builder
+WORKDIR /workspace
+COPY gen ./gen
+COPY services/orders ./services/orders
+WORKDIR /workspace/services/orders
+RUN go mod download && CGO_ENABLED=0 go build -o /orders .
+
+FROM alpine:3.19
+RUN apk --no-cache add ca-certificates
+WORKDIR /app
+COPY --from=builder /orders .
+EXPOSE 50051 8081
+ENTRYPOINT ["./orders"]

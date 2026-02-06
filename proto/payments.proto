@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package payments;
+
+option go_package = "github.com/reliability-lab/gen/payments";
+
+service Payments {
+  rpc Charge(ChargeRequest) returns (ChargeResponse);
+}
+
+message ChargeRequest {
+  string order_id = 1;
+  int64 amount_cents = 2;
+  string currency = 3;
+  string idempotency_key = 4;
+}
+
+message ChargeResponse {
+  bool success = 1;
+  string code = 2;
+}
