@@ -1,6 +1,6 @@
 # Reliability Lab
 
-Microservice lab with observability stack (Postgres, OTel, Prometheus, Grafana, Tempo, Loki, Promtail). Step 2 adds full business logic: gateway REST API, orders (Postgres + idempotency), payments (idempotency + fault injection), notifications, and k6 load testing.
+Microservice lab with observability stack (Postgres, OTel, Prometheus, Grafana, Tempo, Loki, Promtail). Full business logic: gateway REST API, orders (Postgres + idempotency), payments (idempotency + fault injection), notifications, and k6 load testing.
 
 ## Prerequisites
 
